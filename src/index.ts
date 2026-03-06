@@ -41,9 +41,14 @@ export default function register(api: any): void {
 
   const pollInbox = async (): Promise<void> => {
     if (!state.client || !state.config) return
+    api.logger?.info('[agentmail-plugin] Polling inbox...')
     try {
       const messages = await state.client.listMessages({ limit: 50 })
       const unseen = messages.filter((m) => !m.labels.includes(AGENT_SEEN_LABEL))
+
+      api.logger?.info(
+        `[agentmail-plugin] Poll complete — ${messages.length} message(s) total, ${unseen.length} unseen`,
+      )
 
       // Keep the hook cache fresh regardless of whether there's a notification channel
       state.unseenCache = {
@@ -51,9 +56,19 @@ export default function register(api: any): void {
         subjects: unseen.slice(0, 5).map((m) => m.subject),
       }
 
-      if (unseen.length === 0 || !state.config.notificationChannel) return
+      if (unseen.length === 0) return
+
+      if (!state.config.notificationChannel) {
+        api.logger?.info(
+          '[agentmail-plugin] Unseen messages found but no notificationChannel configured — skipping notifications',
+        )
+        return
+      }
 
       for (const msg of unseen) {
+        api.logger?.info(
+          `[agentmail-plugin] Notifying about message "${msg.subject}" from ${msg.from}`,
+        )
         const lines = [
           `New email from ${msg.from} — "${msg.subject}"`,
           msg.preview ? `Preview: ${msg.preview}` : '',
@@ -62,6 +77,7 @@ export default function register(api: any): void {
 
         await sendToChannel(state.config.notificationChannel, lines.join('\n'))
         await state.client.updateMessage(msg.message_id, { labels: [AGENT_SEEN_LABEL] })
+        api.logger?.info(`[agentmail-plugin] Marked message "${msg.message_id}" as agent-seen`)
       }
     } catch (err) {
       api.logger?.warn('[agentmail-plugin] Poll error:', err)
