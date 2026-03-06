@@ -1,0 +1,58 @@
+{
+  "id": "openclaw-agentmail-plugin",
+  "name": "AgentMail",
+  "description": "Send and receive emails via AgentMail. Monitor your inbox, reply to messages, and always respond in the right language.",
+  "version": "0.1.0",
+  "kind": "integration",
+  "skills": ["./skills"],
+  "configSchema": {
+    "type": "object",
+    "required": ["apiKey", "inboxId", "signature"],
+    "additionalProperties": false,
+    "properties": {
+      "apiKey": {
+        "type": "string",
+        "description": "Your AgentMail API key (Bearer token)"
+      },
+      "inboxId": {
+        "type": "string",
+        "description": "The ID of your existing AgentMail inbox"
+      },
+      "signature": {
+        "type": "string",
+        "description": "Plain-text signature appended to every outgoing email"
+      },
+      "pollingIntervalMinutes": {
+        "type": "number",
+        "default": 5,
+        "description": "How often (in minutes) to check the inbox for new messages"
+      },
+      "notificationChannel": {
+        "type": "string",
+        "description": "OpenClaw channel ID to post new-email notifications to (e.g. 'telegram')"
+      }
+    }
+  },
+  "uiHints": {
+    "apiKey": {
+      "label": "AgentMail API Key",
+      "sensitive": true,
+      "placeholder": "am_..."
+    },
+    "inboxId": {
+      "label": "Inbox ID",
+      "placeholder": "your-inbox-id"
+    },
+    "signature": {
+      "label": "Email Signature",
+      "placeholder": "Kind regards,\nYour Name"
+    },
+    "pollingIntervalMinutes": {
+      "label": "Polling interval (minutes)"
+    },
+    "notificationChannel": {
+      "label": "Notification Channel ID",
+      "placeholder": "telegram"
+    }
+  }
+}

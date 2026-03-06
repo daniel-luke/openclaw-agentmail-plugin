@@ -1,0 +1,17 @@
+{
+  "name": "openclaw-agentmail-plugin",
+  "version": "0.1.0",
+  "description": "AgentMail integration for OpenClaw — send, read, reply to emails and monitor your inbox",
+  "openclaw": {
+    "extensions": ["./src/index.ts"],
+    "install": {
+      "localPath": "extensions/openclaw-agentmail-plugin",
+      "defaultChoice": "local"
+    }
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.0.0"
+  }
+}
