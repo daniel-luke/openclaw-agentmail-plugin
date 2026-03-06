@@ -1,4 +1,6 @@
+import * as path from 'path'
 import { AgentMailClient } from './agentmail-client.js'
+import { SeenStore } from './seen-store.js'
 import { makeSendEmailTool } from './tools/email-send.js'
 import { makeListEmailsTool } from './tools/email-list.js'
 import { makeGetEmailTool } from './tools/email-get.js'
@@ -21,6 +23,7 @@ interface UnseenCache {
 interface PluginState {
   client?: AgentMailClient
   config?: PluginConfig
+  seenStore?: SeenStore
   unseenCache?: UnseenCache
   pollingTimer?: ReturnType<typeof setInterval>
 }
@@ -32,22 +35,24 @@ export default function register(api: any): void {
   const state: PluginState = {}
 
   const sendToChannel = async (channelId: string, message: string): Promise<void> => {
+    api.logger?.info(`[agentmail-plugin] Sending notification to channel "${channelId}"`)
     try {
       await api.runtime?.channels?.send?.(channelId, message)
-    } catch {
-      api.logger?.info(`[agentmail-plugin] Channel notification (${channelId}): ${message}`)
+      api.logger?.info(`[agentmail-plugin] Notification sent to channel "${channelId}"`)
+    } catch (err) {
+      api.logger?.warn(`[agentmail-plugin] Failed to send to channel "${channelId}":`, err)
     }
   }
 
   const pollInbox = async (): Promise<void> => {
-    if (!state.client || !state.config) return
+    if (!state.client || !state.config || !state.seenStore) return
     api.logger?.info('[agentmail-plugin] Polling inbox...')
     try {
       const messages = await state.client.listMessages({ limit: 50 })
-      const unseen = messages.filter((m) => !m.labels.includes(AGENT_SEEN_LABEL))
+      const unseen = messages.filter((m) => !state.seenStore!.has(m.message_id))
 
       api.logger?.info(
-        `[agentmail-plugin] Poll complete — ${messages.length} message(s) total, ${unseen.length} unseen`,
+        `[agentmail-plugin] Poll complete — ${messages.length} message(s) total, ${unseen.length} new`,
       )
 
       // Keep the hook cache fresh regardless of whether there's a notification channel
@@ -60,8 +65,10 @@ export default function register(api: any): void {
 
       if (!state.config.notificationChannel) {
         api.logger?.info(
-          '[agentmail-plugin] Unseen messages found but no notificationChannel configured — skipping notifications',
+          '[agentmail-plugin] New messages found but no notificationChannel configured — skipping notifications',
         )
+        // Still mark them as seen so future polls don't keep counting them
+        for (const msg of unseen) state.seenStore.add(msg.message_id)
         return
       }
 
@@ -76,8 +83,8 @@ export default function register(api: any): void {
         ].filter(Boolean)
 
         await sendToChannel(state.config.notificationChannel, lines.join('\n'))
-        await state.client.updateMessage(msg.message_id, { labels: [AGENT_SEEN_LABEL] })
-        api.logger?.info(`[agentmail-plugin] Marked message "${msg.message_id}" as agent-seen`)
+        state.seenStore.add(msg.message_id)
+        api.logger?.info(`[agentmail-plugin] Marked "${msg.message_id}" as seen in local store`)
       }
     } catch (err) {
       api.logger?.warn('[agentmail-plugin] Poll error:', err)
@@ -96,9 +103,16 @@ export default function register(api: any): void {
         : raw?.config?.apiKey ? raw.config
         : (raw?.plugins?.entries?.['openclaw-agentmail-plugin']?.config ?? {})
 
+      const workspaceDir =
+        api.workspace?.path?.('agentmail') ??
+        path.join(process.env.HOME ?? '~', '.openclaw', 'workspace', 'agentmail')
+
       state.config = config
       state.client = new AgentMailClient(config.apiKey, config.inboxId)
       state.unseenCache = { count: 0, subjects: [] }
+      state.seenStore = new SeenStore(workspaceDir)
+      state.seenStore.load()
+      api.logger?.info(`[agentmail-plugin] Loaded seen-store from ${workspaceDir}`)
 
       const intervalMs = (config.pollingIntervalMinutes ?? 5) * 60 * 1000
 
